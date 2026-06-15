@@ -1,14 +1,56 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
   <meta charset="UTF-8">
-  <title>Sandbox</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D GLB Viewer Demo</title>
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background-color: #f0f0f0;
+    }
+    header {
+      padding: 1rem;
+      background: #333;
+      color: white;
+      text-align: center;
+    }
+    model-viewer {
+      flex: 1;
+      width: 100%;
+      background-color: #eee;
+    }
+    .controls {
+      padding: 1rem;
+      background: white;
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+    }
+  </style>
 </head>
 <body>
-  <h1>Sandbox is live 🎉<br>Ciao Ciao</h1>
-  <script>
-    console.log("JS is running!");
-    document.body.style.background = "#f0f0f0";
-  </script>
+  <header>
+    <h1>3D GLB Viewer Demo</h1>
+  </header>
+
+  <model-viewer 
+    id="viewer"
+    src="public/assets/model.glb" 
+    alt="Un modello 3D GLB" 
+    auto-rotate 
+    camera-controls 
+    ar 
+    shadow-intensity="1">
+  </model-viewer>
+
+  <div class="controls">
+    <p>Deposita i tuoi file .glb in <code>public/assets/</code> e rinominali in <code>model.glb</code> oppure aggiorna l'attributo <code>src</code> nel codice.</p>
+  </div>
 </body>
 </html>
