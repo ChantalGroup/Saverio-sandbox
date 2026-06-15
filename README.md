@@ -5,14 +5,16 @@ Questa è una semplice demo web per visualizzare modelli 3D in formato GLB utili
 ## Struttura del Progetto
 
 - `index.html`: Il visualizzatore principale.
-- `public/assets/`: Cartella dove depositare i modelli 3D.
+- `public/assets/3d/`: Cartella per i modelli 3D (es. `SM_Interaction_01.glb`).
+- `public/assets/hdri/`: Cartella per gli sfondi HDRI.
 - `.gitattributes`: Configurazione per Git LFS.
 
 ## Come usare la demo
 
-1. Deposita il tuo file `.glb` nella cartella `public/assets/`.
-2. Rinomina il file in `model.glb` oppure modifica il percorso `src` in `index.html`.
-3. Apri `index.html` in un browser web (potrebbe essere necessario un server locale per alcuni asset).
+1. Deposita i tuoi file `.glb` nella cartella `public/assets/3d/`.
+2. Deposita i tuoi file `.hdr` nella cartella `public/assets/hdri/`.
+3. Modifica il percorso `src` (ed eventualmente `environment-image`) in `index.html`.
+4. Apri `index.html` in un browser web (potrebbe essere necessario un server locale per alcuni asset).
 
 ## Git LFS (Large File Storage)
 
