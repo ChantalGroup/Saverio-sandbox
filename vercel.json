@@ -2,7 +2,7 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/(?!public/assets/).*",
+      "source": "/((?!public/assets/).*)",
       "destination": "/index.html"
     }
   ]
