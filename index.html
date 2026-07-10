@@ -13,15 +13,22 @@
     }
   </script>
   <style>
-    body {
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
       margin: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+    body {
       font-family: sans-serif;
       display: flex;
       flex-direction: column;
-      height: 100vh;
       background-color: #f0f0f0;
     }
     header {
+      flex-shrink: 0;
       padding: 1rem;
       background: #333;
       color: white;
@@ -143,6 +150,22 @@
     </div>
 
     <div class="panel-section">
+      <h3>Camera</h3>
+      <div class="control-group">
+        <label>Offset X</label>
+        <input type="number" id="camOffsetX" step="0.01" value="0">
+      </div>
+      <div class="control-group">
+        <label>Offset Y</label>
+        <input type="number" id="camOffsetY" step="0.01" value="0">
+      </div>
+      <div class="control-group">
+        <label>Offset Z</label>
+        <input type="number" id="camOffsetZ" step="0.01" value="0">
+      </div>
+    </div>
+
+    <div class="panel-section">
       <h3>Scala</h3>
       <div id="scaleList">
         <!-- Will be populated by JS -->
@@ -181,6 +204,9 @@
     const hdriExposure = document.getElementById('hdriExposure');
     const materialsList = document.getElementById('materialsList');
     const scaleList = document.getElementById('scaleList');
+    const camOffsetX = document.getElementById('camOffsetX');
+    const camOffsetY = document.getElementById('camOffsetY');
+    const camOffsetZ = document.getElementById('camOffsetZ');
 
     const scene = new THREE.Scene();
     const modelGroup = new THREE.Group();
@@ -209,6 +235,7 @@
 
     const materials = new Map();
     let currentEnvTexture = null;
+    const sceneCenter = new THREE.Vector3(); // centro scena calcolato da frameScene(), riferimento per l'offset camera
 
     function resize() {
       const width = container.clientWidth;
@@ -224,6 +251,7 @@
       if (box.isEmpty()) return;
 
       const center = box.getCenter(new THREE.Vector3());
+      sceneCenter.copy(center);
       const size = box.getSize(new THREE.Vector3());
       const maxDim = Math.max(size.x, size.y, size.z);
 
@@ -239,6 +267,25 @@
       controls.target.copy(center);
       controls.update();
     }
+
+    // Sposta insieme target e camera dello stesso delta (mantenendo l'angolo/zoom
+    // correnti): un "pan" controllato via numeri invece che via drag del mouse,
+    // dato che il pan libero è disattivato di proposito.
+    function applyCameraOffset() {
+      const newTarget = new THREE.Vector3(
+        sceneCenter.x + (parseFloat(camOffsetX.value) || 0),
+        sceneCenter.y + (parseFloat(camOffsetY.value) || 0),
+        sceneCenter.z + (parseFloat(camOffsetZ.value) || 0)
+      );
+      const delta = newTarget.clone().sub(controls.target);
+      camera.position.add(delta);
+      controls.target.copy(newTarget);
+      controls.update();
+    }
+
+    [camOffsetX, camOffsetY, camOffsetZ].forEach((input) => {
+      input.addEventListener('input', applyCameraOffset);
+    });
 
     // Il GLB può contenere materiali non-PBR (es. MeshBasicMaterial/Lambert/Phong):
     // dato che l'unica luce in scena è l'IBL dell'HDRI, li normalizziamo tutti a
