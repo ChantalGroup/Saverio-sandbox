@@ -119,9 +119,57 @@
       justify-content: center;
       gap: 1rem;
     }
+    .loader {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      background: #1a1a1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      transition: opacity 0.4s ease;
+    }
+    .loader.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .loader-logo {
+      width: 40%;
+      max-width: 220px;
+      height: auto;
+    }
+    .loader-bar {
+      width: 240px;
+      max-width: 60vw;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .loader-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: #007bff;
+      transition: width 0.2s ease;
+    }
+    .loader-percent {
+      color: white;
+      font-family: sans-serif;
+      font-size: 0.85rem;
+    }
   </style>
 </head>
 <body>
+  <div id="loader" class="loader">
+    <img src="/public/assets/images/Chantal.svg" alt="Chantal" class="loader-logo">
+    <div class="loader-bar">
+      <div id="loaderFill" class="loader-bar-fill"></div>
+    </div>
+    <div id="loaderPercent" class="loader-percent">0%</div>
+  </div>
+
   <header>
     <div style="width: 120px;"></div> <!-- Spacer for centering -->
     <h1>Chantal - Virtual try on - POC 00.00 - Saverio Trapasso</h1>
@@ -205,6 +253,9 @@
       character: { path: '/public/assets/3d/SM_Male_Character.glb', label: 'Personaggio' }
     };
 
+    const loader = document.getElementById('loader');
+    const loaderFill = document.getElementById('loaderFill');
+    const loaderPercent = document.getElementById('loaderPercent');
     const container = document.getElementById('viewer-container');
     const debugPanel = document.getElementById('debugPanel');
     const hdriSelect = document.getElementById('hdriSelect');
@@ -347,9 +398,9 @@
     // di allineamento tra pavimento/maglietta/personaggio: niente ricentraggio
     // basato su bounding box, i root restano all'origine così come esportati, e
     // la scala (vedi buildScaleControls) viene applicata attorno a quello stesso pivot.
-    async function loadModel(key) {
+    async function loadModel(key, onProgress) {
       const { path } = MODELS[key];
-      const gltf = await gltfLoader.loadAsync(path);
+      const gltf = await gltfLoader.loadAsync(path, onProgress);
       const root = gltf.scene;
       root.name = key;
 
@@ -395,18 +446,17 @@
     // L'HDRI è l'unica fonte di luce (nessuna luce piazzata a mano) ed è anche
     // sempre visibile come sfondo: scene.environment guida l'illuminazione PBR,
     // scene.background mostra l'immagine equirettangolare vera e propria.
-    function loadEnvironment(path) {
-      exrLoader.load(path, (texture) => {
-        texture.mapping = THREE.EquirectangularReflectionMapping;
+    async function loadEnvironment(path, onProgress) {
+      const texture = await exrLoader.loadAsync(path, onProgress);
+      texture.mapping = THREE.EquirectangularReflectionMapping;
 
-        const pmrem = pmremGenerator.fromEquirectangular(texture);
-        scene.environment = pmrem.texture;
-        scene.background = texture;
-        applyEnvironmentRotation();
+      const pmrem = pmremGenerator.fromEquirectangular(texture);
+      scene.environment = pmrem.texture;
+      scene.background = texture;
+      applyEnvironmentRotation();
 
-        if (currentEnvTexture) currentEnvTexture.dispose();
-        currentEnvTexture = texture;
-      });
+      if (currentEnvTexture) currentEnvTexture.dispose();
+      currentEnvTexture = texture;
     }
 
     // HDRI Controls
@@ -622,13 +672,51 @@
       renderer.render(scene, camera);
     }
 
+    // Progresso reale (byte scaricati) dell'HDRI + dei 3 GLB, combinati in
+    // un'unica percentuale per la barra del loader iniziale.
+    const loadProgress = new Map(); // key -> { loaded, total }
+
+    function updateLoaderBar() {
+      const entries = Array.from(loadProgress.values());
+      if (!entries.length) return;
+      const loaded = entries.reduce((sum, p) => sum + p.loaded, 0);
+      const total = entries.reduce((sum, p) => sum + (p.total || p.loaded), 0);
+      const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+      loaderFill.style.width = `${pct}%`;
+      loaderPercent.innerText = `${pct}%`;
+    }
+
+    function trackProgress(key) {
+      loadProgress.set(key, { loaded: 0, total: 0 });
+      return (event) => {
+        loadProgress.set(key, {
+          loaded: event.loaded,
+          total: event.lengthComputable ? event.total : event.loaded
+        });
+        updateLoaderBar();
+      };
+    }
+
+    function hideLoader() {
+      loader.classList.add('hidden');
+      loader.addEventListener('transitionend', () => loader.remove(), { once: true });
+    }
+
     async function init() {
       resize();
-      loadEnvironment(hdriSelect.value);
-      await Promise.all(Object.keys(MODELS).map(loadModel));
+      try {
+        await Promise.all([
+          loadEnvironment(hdriSelect.value, trackProgress('hdri')),
+          ...Object.keys(MODELS).map((key) => loadModel(key, trackProgress(key)))
+        ]);
+      } catch (err) {
+        loaderPercent.innerText = `Errore nel caricamento: ${err.message || err}`;
+        return;
+      }
       buildScaleControls();
       frameScene();
       animate();
+      hideLoader();
     }
 
     // onclick inline handlers richiedono queste funzioni nello scope globale
