@@ -313,13 +313,15 @@
         group.appendChild(label);
 
         const input = document.createElement('input');
-        input.type = 'range';
-        input.min = 0.1;
-        input.max = 3;
-        input.step = 0.01;
+        input.type = 'number';
+        input.step = 0.001;
+        input.min = 0.001;
         input.value = root.scale.x;
         input.addEventListener('input', (e) => {
-          root.scale.setScalar(parseFloat(e.target.value));
+          const value = parseFloat(e.target.value);
+          if (Number.isFinite(value) && value > 0) {
+            root.scale.setScalar(value);
+          }
         });
         group.appendChild(input);
 
