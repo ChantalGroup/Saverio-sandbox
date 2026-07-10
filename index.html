@@ -180,6 +180,14 @@
     </div>
 
     <button class="export-btn" onclick="exportJson()">Esporta JSON</button>
+
+    <div class="control-group">
+      <label>Password salvataggio remoto</label>
+      <input type="password" id="savePassword">
+    </div>
+    <button class="export-btn" onclick="saveRemote()">Salva su GitHub</button>
+    <div id="saveStatus" style="font-size: 0.75rem; word-break: break-all;"></div>
+
     <button class="debug-btn" style="background: #6c757d;" onclick="toggleDebug()">Chiudi</button>
   </div>
 
@@ -207,6 +215,8 @@
     const camOffsetX = document.getElementById('camOffsetX');
     const camOffsetY = document.getElementById('camOffsetY');
     const camOffsetZ = document.getElementById('camOffsetZ');
+    const savePassword = document.getElementById('savePassword');
+    const saveStatus = document.getElementById('saveStatus');
 
     const scene = new THREE.Scene();
     const modelGroup = new THREE.Group();
@@ -412,82 +422,162 @@
       renderer.toneMappingExposure = parseFloat(e.target.value);
     });
 
+    // Schema di tutti i parametri scalari/colore esposti da THREE.MeshPhysicalMaterial
+    // (il PBR completo di three.js). Escluse solo le texture map (nessun upload richiesto).
+    const MATERIAL_PARAMS = [
+      { key: 'color', label: 'Base Color', type: 'color' },
+      { key: 'opacity', label: 'Opacity', type: 'range', min: 0, max: 1, step: 0.01 },
+      { key: 'transparent', label: 'Transparent', type: 'checkbox' },
+      { key: 'metalness', label: 'Metalness', type: 'range', min: 0, max: 1, step: 0.01 },
+      { key: 'roughness', label: 'Roughness', type: 'range', min: 0, max: 1, step: 0.01 },
+      { key: 'emissive', label: 'Emissive Color', type: 'color' },
+      { key: 'emissiveIntensity', label: 'Emissive Intensity', type: 'number', min: 0, step: 0.01 },
+      { key: 'envMapIntensity', label: 'Env Map Intensity', type: 'number', min: 0, step: 0.01 },
+      { key: 'ior', label: 'IOR', type: 'range', min: 1, max: 2.333, step: 0.001 },
+      { key: 'specularIntensity', label: 'Specular Intensity', type: 'range', min: 0, max: 1, step: 0.01 },
+      { key: 'specularColor', label: 'Specular Color', type: 'color' },
+      { key: 'clearcoat', label: 'Clearcoat', type: 'range', min: 0, max: 1, step: 0.01 },
+      { key: 'clearcoatRoughness', label: 'Clearcoat Roughness', type: 'range', min: 0, max: 1, step: 0.01 },
+      { key: 'sheen', label: 'Sheen', type: 'range', min: 0, max: 1, step: 0.01 },
+      { key: 'sheenRoughness', label: 'Sheen Roughness', type: 'range', min: 0, max: 1, step: 0.01 },
+      { key: 'sheenColor', label: 'Sheen Color', type: 'color' },
+      { key: 'transmission', label: 'Transmission', type: 'range', min: 0, max: 1, step: 0.01 },
+      { key: 'thickness', label: 'Thickness', type: 'number', min: 0, step: 0.01 },
+      { key: 'attenuationDistance', label: 'Attenuation Distance', type: 'number', min: 0, step: 0.1 },
+      { key: 'attenuationColor', label: 'Attenuation Color', type: 'color' },
+      { key: 'iridescence', label: 'Iridescence', type: 'range', min: 0, max: 1, step: 0.01 },
+      { key: 'iridescenceIOR', label: 'Iridescence IOR', type: 'range', min: 1, max: 2.333, step: 0.001 },
+      { key: 'anisotropy', label: 'Anisotropy', type: 'range', min: 0, max: 1, step: 0.01 },
+      { key: 'anisotropyRotation', label: 'Anisotropy Rotation', type: 'number', min: 0, max: 6.283, step: 0.01 },
+      {
+        key: 'side',
+        label: 'Side',
+        type: 'select',
+        options: [
+          { value: THREE.FrontSide, label: 'Front' },
+          { value: THREE.BackSide, label: 'Back' },
+          { value: THREE.DoubleSide, label: 'Double' }
+        ]
+      },
+      { key: 'wireframe', label: 'Wireframe', type: 'checkbox' },
+      { key: 'flatShading', label: 'Flat Shading', type: 'checkbox' }
+    ];
+
+    function createParamControl(material, def) {
+      const group = document.createElement('div');
+      group.className = 'control-group';
+
+      const label = document.createElement('label');
+      label.innerText = def.label;
+      group.appendChild(label);
+
+      let input;
+
+      if (def.type === 'color') {
+        input = document.createElement('input');
+        input.type = 'color';
+        input.value = `#${material[def.key].getHexString()}`;
+        input.addEventListener('input', (e) => {
+          material[def.key].set(e.target.value);
+          material.needsUpdate = true;
+        });
+      } else if (def.type === 'checkbox') {
+        input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = !!material[def.key];
+        input.addEventListener('change', (e) => {
+          material[def.key] = e.target.checked;
+          material.needsUpdate = true;
+        });
+      } else if (def.type === 'select') {
+        input = document.createElement('select');
+        def.options.forEach((opt) => {
+          const optionEl = document.createElement('option');
+          optionEl.value = opt.value;
+          optionEl.innerText = opt.label;
+          if (material[def.key] === opt.value) optionEl.selected = true;
+          input.appendChild(optionEl);
+        });
+        input.addEventListener('change', (e) => {
+          material[def.key] = parseInt(e.target.value, 10);
+          material.needsUpdate = true;
+        });
+      } else {
+        input = document.createElement('input');
+        input.type = def.type; // 'range' o 'number'
+        if (def.min !== undefined) input.min = def.min;
+        if (def.max !== undefined) input.max = def.max;
+        input.step = def.step ?? 0.01;
+        const current = material[def.key];
+        input.value = Number.isFinite(current) ? current : '';
+        input.addEventListener('input', (e) => {
+          const value = parseFloat(e.target.value);
+          if (Number.isFinite(value)) {
+            material[def.key] = value;
+            material.needsUpdate = true;
+          }
+        });
+      }
+
+      group.appendChild(input);
+      return group;
+    }
+
     function populateMaterials() {
       materialsList.innerHTML = '';
 
-      let index = 0;
       materials.forEach((material) => {
         const section = document.createElement('div');
-        section.className = 'control-group';
         section.style.borderTop = '1px solid #eee';
         section.style.paddingTop = '0.5rem';
+        section.style.marginBottom = '0.5rem';
 
         const name = document.createElement('label');
-        name.innerHTML = `<strong>${material.name || 'Material ' + index}</strong>`;
+        name.innerHTML = `<strong>${material.name || 'Material'}</strong>`;
         section.appendChild(name);
 
-        // Base Color
-        const colorLabel = document.createElement('label');
-        colorLabel.innerText = 'Base Color';
-        const colorInput = document.createElement('input');
-        colorInput.type = 'color';
-        colorInput.value = `#${material.color.getHexString()}`;
-        colorInput.addEventListener('input', (e) => {
-          material.color.set(e.target.value);
+        MATERIAL_PARAMS.forEach((def) => {
+          section.appendChild(createParamControl(material, def));
         });
-        section.appendChild(colorLabel);
-        section.appendChild(colorInput);
-
-        // Metallic
-        const metallicLabel = document.createElement('label');
-        metallicLabel.innerText = 'Metallic';
-        const metallicInput = document.createElement('input');
-        metallicInput.type = 'range';
-        metallicInput.min = 0;
-        metallicInput.max = 1;
-        metallicInput.step = 0.01;
-        metallicInput.value = material.metalness;
-        metallicInput.addEventListener('input', (e) => {
-          material.metalness = parseFloat(e.target.value);
-        });
-        section.appendChild(metallicLabel);
-        section.appendChild(metallicInput);
-
-        // Roughness
-        const roughnessLabel = document.createElement('label');
-        roughnessLabel.innerText = 'Roughness';
-        const roughnessInput = document.createElement('input');
-        roughnessInput.type = 'range';
-        roughnessInput.min = 0;
-        roughnessInput.max = 1;
-        roughnessInput.step = 0.01;
-        roughnessInput.value = material.roughness;
-        roughnessInput.addEventListener('input', (e) => {
-          material.roughness = parseFloat(e.target.value);
-        });
-        section.appendChild(roughnessLabel);
-        section.appendChild(roughnessInput);
 
         materialsList.appendChild(section);
-        index += 1;
       });
     }
 
-    function exportJson() {
-      const data = {
+    function serializeParamValue(material, def) {
+      if (def.type === 'color') return `#${material[def.key].getHexString()}`;
+      return material[def.key];
+    }
+
+    // Stato completo della scena (lighting + camera + scala + tutti i parametri
+    // materiale): usato sia dall'export locale che dal salvataggio remoto.
+    function buildConfig() {
+      return {
         lighting: {
           hdri: hdriSelect.value,
-          rotation: hdriRotation.value,
-          exposure: hdriExposure.value
+          rotation: parseFloat(hdriRotation.value) || 0,
+          exposure: parseFloat(hdriExposure.value) || 0
         },
-        materials: Array.from(materials.values()).map((m) => ({
-          name: m.name,
-          baseColorFactor: [m.color.r, m.color.g, m.color.b, m.opacity ?? 1],
-          metallicFactor: m.metalness,
-          roughnessFactor: m.roughness
-        }))
+        camera: {
+          offsetX: parseFloat(camOffsetX.value) || 0,
+          offsetY: parseFloat(camOffsetY.value) || 0,
+          offsetZ: parseFloat(camOffsetZ.value) || 0
+        },
+        scale: Object.fromEntries(
+          Array.from(modelRoots.entries()).map(([key, root]) => [key, root.scale.x])
+        ),
+        materials: Array.from(materials.values()).map((m) => {
+          const params = {};
+          MATERIAL_PARAMS.forEach((def) => {
+            params[def.key] = serializeParamValue(m, def);
+          });
+          return { name: m.name, ...params };
+        })
       };
+    }
 
+    function exportJson() {
+      const data = buildConfig();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -495,6 +585,28 @@
       a.download = 'lookdev_settings.json';
       a.click();
       URL.revokeObjectURL(url);
+    }
+
+    // Chiama la Serverless Function /api/save-config, che fa il commit del JSON
+    // su GitHub (vedi api/save-config.js). Richiede GITHUB_TOKEN/GITHUB_REPO/
+    // SAVE_SECRET configurate come env var su Vercel.
+    async function saveRemote() {
+      saveStatus.innerText = 'Salvataggio in corso...';
+      try {
+        const res = await fetch('/api/save-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ secret: savePassword.value, config: buildConfig() })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          saveStatus.innerText = `Errore: ${data.error || res.status}`;
+          return;
+        }
+        saveStatus.innerText = data.commitUrl ? `Salvato: ${data.commitUrl}` : 'Salvato su GitHub.';
+      } catch (err) {
+        saveStatus.innerText = `Errore di rete: ${err.message || err}`;
+      }
     }
 
     function toggleDebug() {
@@ -522,6 +634,7 @@
     // onclick inline handlers richiedono queste funzioni nello scope globale
     window.toggleDebug = toggleDebug;
     window.exportJson = exportJson;
+    window.saveRemote = saveRemote;
 
     init();
   </script>
