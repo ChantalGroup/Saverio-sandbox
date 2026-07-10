@@ -7,8 +7,8 @@
   <script type="importmap">
     {
       "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
       }
     }
   </script>
@@ -125,14 +125,11 @@
     <h2>Debug Lookdev</h2>
 
     <div class="panel-section">
-      <h3>Lighting</h3>
+      <h3>Lighting (HDRI)</h3>
       <div class="control-group">
         <label>HDRI</label>
         <select id="hdriSelect">
-          <option value="">Default (solo luci)</option>
-          <option value="/public/assets/hdri/studio_kominka_02_2k.exr" selected>Studio Kominka</option>
-          <option value="/public/assets/hdri/tree_lined_driveway_2k.exr">Tree Lined Driveway</option>
-          <option value="/public/assets/hdri/wooden_studio_09_2k.exr">Wooden Studio</option>
+          <option value="/public/assets/hdri/T_kloppenheim_06_puresky_4k.exr" selected>Kloppenheim Puresky</option>
         </select>
       </div>
       <div class="control-group">
@@ -187,22 +184,13 @@
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = parseFloat(hdriExposure.value);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.setClearColor(0xeeeeee, 1);
+    renderer.setClearColor(0xeeeeee, 1); // fallback finché l'HDRI (che è l'unica fonte di luce) non è caricata
     container.appendChild(renderer.domElement);
 
+    // Solo orbita e zoom: niente pan, così l'utente non può "perdere" la scena/l'HDRI di sfondo.
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(2048, 2048);
-    scene.add(keyLight);
-    scene.add(keyLight.target);
+    controls.enablePan = false;
 
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     pmremGenerator.compileEquirectangularShader();
@@ -211,6 +199,7 @@
     const exrLoader = new EXRLoader();
 
     const materials = new Map();
+    let currentEnvTexture = null;
 
     function resize() {
       const width = container.clientWidth;
@@ -240,29 +229,49 @@
 
       controls.target.copy(center);
       controls.update();
+    }
 
-      keyLight.position.copy(center).add(new THREE.Vector3(maxDim, maxDim * 1.5, maxDim));
-      keyLight.target.position.copy(center);
-      keyLight.shadow.camera.left = -maxDim;
-      keyLight.shadow.camera.right = maxDim;
-      keyLight.shadow.camera.top = maxDim;
-      keyLight.shadow.camera.bottom = -maxDim;
-      keyLight.shadow.camera.near = 0.1;
-      keyLight.shadow.camera.far = maxDim * 10;
-      keyLight.shadow.camera.updateProjectionMatrix();
+    // Il GLB può contenere materiali non-PBR (es. MeshBasicMaterial/Lambert/Phong):
+    // dato che l'unica luce in scena è l'IBL dell'HDRI, li normalizziamo tutti a
+    // THREE.MeshPhysicalMaterial (il materiale PBR completo di three.js) così
+    // rispondono correttamente all'environment lighting.
+    function toPbrMaterial(source) {
+      if (source instanceof THREE.MeshPhysicalMaterial) return source;
+
+      const pbr = new THREE.MeshPhysicalMaterial({
+        name: source.name,
+        map: source.map ?? null,
+        normalMap: source.normalMap ?? null,
+        aoMap: source.aoMap ?? null,
+        aoMapIntensity: source.aoMapIntensity ?? 1,
+        alphaMap: source.alphaMap ?? null,
+        emissiveMap: source.emissiveMap ?? null,
+        emissiveIntensity: source.emissiveIntensity ?? 1,
+        metalnessMap: source.metalnessMap ?? null,
+        roughnessMap: source.roughnessMap ?? null,
+        transparent: source.transparent ?? false,
+        opacity: source.opacity ?? 1,
+        side: source.side ?? THREE.FrontSide,
+        // fallback dielettrico (non metallico, opaco): un materiale "basico" senza
+        // metalness/roughness propri non è quasi mai un metallo lucido
+        metalness: source.metalness ?? 0,
+        roughness: source.roughness ?? 1
+      });
+      pbr.color.copy(source.color ?? new THREE.Color(0xffffff));
+      pbr.emissive.copy(source.emissive ?? new THREE.Color(0x000000));
+      return pbr;
     }
 
     function collectMaterials(root) {
       root.traverse((node) => {
         if (!node.isMesh) return;
-        node.castShadow = true;
-        node.receiveShadow = true;
-        const nodeMaterials = Array.isArray(node.material) ? node.material : [node.material];
-        nodeMaterials.forEach((material) => {
-          if (material && !materials.has(material.uuid)) {
-            materials.set(material.uuid, material);
-          }
-        });
+        if (Array.isArray(node.material)) {
+          node.material = node.material.map(toPbrMaterial);
+          node.material.forEach((m) => materials.set(m.uuid, m));
+        } else {
+          node.material = toPbrMaterial(node.material);
+          materials.set(node.material.uuid, node.material);
+        }
       });
     }
 
@@ -294,15 +303,26 @@
       modelGroup.add(root);
     }
 
+    function applyEnvironmentRotation() {
+      const rad = THREE.MathUtils.degToRad(parseFloat(hdriRotation.value));
+      scene.environmentRotation.y = rad;
+      scene.backgroundRotation.y = rad;
+    }
+
+    // L'HDRI è l'unica fonte di luce (nessuna luce piazzata a mano) ed è anche
+    // sempre visibile come sfondo: scene.environment guida l'illuminazione PBR,
+    // scene.background mostra l'immagine equirettangolare vera e propria.
     function loadEnvironment(path) {
-      if (!path) {
-        scene.environment = null;
-        return;
-      }
       exrLoader.load(path, (texture) => {
-        const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-        scene.environment = envMap;
-        texture.dispose();
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+
+        const pmrem = pmremGenerator.fromEquirectangular(texture);
+        scene.environment = pmrem.texture;
+        scene.background = texture;
+        applyEnvironmentRotation();
+
+        if (currentEnvTexture) currentEnvTexture.dispose();
+        currentEnvTexture = texture;
       });
     }
 
@@ -311,8 +331,8 @@
       loadEnvironment(e.target.value);
     });
 
-    hdriRotation.addEventListener('input', (e) => {
-      modelGroup.rotation.y = THREE.MathUtils.degToRad(parseFloat(e.target.value));
+    hdriRotation.addEventListener('input', () => {
+      applyEnvironmentRotation();
     });
 
     hdriExposure.addEventListener('input', (e) => {
@@ -353,7 +373,7 @@
         metallicInput.min = 0;
         metallicInput.max = 1;
         metallicInput.step = 0.01;
-        metallicInput.value = material.metalness ?? 0;
+        metallicInput.value = material.metalness;
         metallicInput.addEventListener('input', (e) => {
           material.metalness = parseFloat(e.target.value);
         });
@@ -368,7 +388,7 @@
         roughnessInput.min = 0;
         roughnessInput.max = 1;
         roughnessInput.step = 0.01;
-        roughnessInput.value = material.roughness ?? 1;
+        roughnessInput.value = material.roughness;
         roughnessInput.addEventListener('input', (e) => {
           material.roughness = parseFloat(e.target.value);
         });
@@ -390,8 +410,8 @@
         materials: Array.from(materials.values()).map((m) => ({
           name: m.name,
           baseColorFactor: [m.color.r, m.color.g, m.color.b, m.opacity ?? 1],
-          metallicFactor: m.metalness ?? 0,
-          roughnessFactor: m.roughness ?? 1
+          metallicFactor: m.metalness,
+          roughnessFactor: m.roughness
         }))
       };
 
