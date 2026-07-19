@@ -248,7 +248,7 @@
     import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
 
     const MODELS = {
-      floor: { path: '/public/assets/3d/SM_Floor.glb', label: 'Floor' },
+      floor: { path: '/public/assets/3d/SM_Floor.glb', label: 'Floor', scale: 3 },
       garment: { path: '/public/assets/3d/SM_CottonTshirt.glb', label: 'Garment' },
       character: { path: '/public/assets/3d/SM_Male_Character.glb', label: 'Character' }
     };
@@ -399,10 +399,11 @@
     // basato su bounding box, i root restano all'origine così come esportati, e
     // la scala (vedi buildScaleControls) viene applicata attorno a quello stesso pivot.
     async function loadModel(key, onProgress) {
-      const { path } = MODELS[key];
+      const { path, scale } = MODELS[key];
       const gltf = await gltfLoader.loadAsync(path, onProgress);
       const root = gltf.scene;
       root.name = key;
+      if (scale !== undefined) root.scale.setScalar(scale);
 
       collectMaterials(root);
       modelGroup.add(root);
