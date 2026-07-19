@@ -308,7 +308,8 @@
     window.addEventListener('resize', resize);
 
     function frameScene() {
-      const box = new THREE.Box3().setFromObject(modelGroup);
+      const framingTarget = modelRoots.get('character') || modelGroup;
+      const box = new THREE.Box3().setFromObject(framingTarget);
       if (box.isEmpty()) return;
 
       const center = box.getCenter(new THREE.Vector3());
