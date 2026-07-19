@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -214,7 +214,7 @@
     </div>
 
     <div class="panel-section">
-      <h3>Scala</h3>
+      <h3>Scale</h3>
       <div id="scaleList">
         <!-- Will be populated by JS -->
       </div>
@@ -227,16 +227,16 @@
       </div>
     </div>
 
-    <button class="export-btn" onclick="exportJson()">Esporta JSON</button>
+    <button class="export-btn" onclick="exportJson()">Export JSON</button>
 
     <div class="control-group">
-      <label>Password salvataggio remoto</label>
+      <label>Remote save password</label>
       <input type="password" id="savePassword">
     </div>
-    <button class="export-btn" onclick="saveRemote()">Salva su GitHub</button>
+    <button class="export-btn" onclick="saveRemote()">Save to GitHub</button>
     <div id="saveStatus" style="font-size: 0.75rem; word-break: break-all;"></div>
 
-    <button class="debug-btn" style="background: #6c757d;" onclick="toggleDebug()">Chiudi</button>
+    <button class="debug-btn" style="background: #6c757d;" onclick="toggleDebug()">Close</button>
   </div>
 
   <div id="viewer-container"></div>
@@ -248,9 +248,9 @@
     import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
 
     const MODELS = {
-      floor: { path: '/public/assets/3d/SM_Floor.glb', label: 'Pavimento' },
-      garment: { path: '/public/assets/3d/SM_CottonTshirt.glb', label: 'Maglietta' },
-      character: { path: '/public/assets/3d/SM_Male_Character.glb', label: 'Personaggio' }
+      floor: { path: '/public/assets/3d/SM_Floor.glb', label: 'Floor' },
+      garment: { path: '/public/assets/3d/SM_CottonTshirt.glb', label: 'Garment' },
+      character: { path: '/public/assets/3d/SM_Male_Character.glb', label: 'Character' }
     };
 
     const loader = document.getElementById('loader');
@@ -641,7 +641,7 @@
     // su GitHub (vedi api/save-config.js). Richiede GITHUB_TOKEN/GITHUB_REPO/
     // SAVE_SECRET configurate come env var su Vercel.
     async function saveRemote() {
-      saveStatus.innerText = 'Salvataggio in corso...';
+      saveStatus.innerText = 'Saving...';
       try {
         const res = await fetch('/api/save-config', {
           method: 'POST',
@@ -650,12 +650,12 @@
         });
         const data = await res.json();
         if (!res.ok) {
-          saveStatus.innerText = `Errore: ${data.error || res.status}`;
+          saveStatus.innerText = `Error: ${data.error || res.status}`;
           return;
         }
-        saveStatus.innerText = data.commitUrl ? `Salvato: ${data.commitUrl}` : 'Salvato su GitHub.';
+        saveStatus.innerText = data.commitUrl ? `Saved: ${data.commitUrl}` : 'Saved to GitHub.';
       } catch (err) {
-        saveStatus.innerText = `Errore di rete: ${err.message || err}`;
+        saveStatus.innerText = `Network error: ${err.message || err}`;
       }
     }
 
@@ -710,7 +710,7 @@
           ...Object.keys(MODELS).map((key) => loadModel(key, trackProgress(key)))
         ]);
       } catch (err) {
-        loaderPercent.innerText = `Errore nel caricamento: ${err.message || err}`;
+        loaderPercent.innerText = `Loading error: ${err.message || err}`;
         return;
       }
       buildScaleControls();
@@ -728,7 +728,7 @@
   </script>
 
   <div class="controls" style="display:none;">
-    <p>Modelli visualizzati: <code>SM_Floor.glb</code> + <code>SM_CottonTshirt.glb</code> + <code>SM_Male_Character.glb</code></p>
+    <p>Models displayed: <code>SM_Floor.glb</code> + <code>SM_CottonTshirt.glb</code> + <code>SM_Male_Character.glb</code></p>
   </div>
 </body>
 </html>
